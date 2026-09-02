@@ -1,0 +1,512 @@
+<script>
+  var dados = BOOT_DATA || { perfil: 'leitor', modo: 'mock', alunos: [], series: [], componentes: [], registros: [] };
+  var registros = dados.registros || [];
+  var alunos = dados.alunos || [];
+  var componentes = dados.componentes || [];
+  var podeEditar = dados.perfil === 'editor';
+  var filtradosAtuais = [];
+  var gruposAtuais = {};
+  var chaveDetalheAberto = null;
+  var arquivoAtestadoSelecionado = null;
+  var VALOR_PADRAO_SUB = 103;
+
+  /** Com atestado, isento (0); sem atestado, valor fixo da substitutiva. */
+  function atualizarValorAutomatico() {
+    var temAtestado = document.getElementById('campoAtestado').checked;
+    var campoValor = document.getElementById('campoValor');
+    campoValor.value = temAtestado ? 0 : VALOR_PADRAO_SUB;
+    campoValor.readOnly = true;
+  }
+
+  function aoCarregar() {
+    var salvo = localStorage.getItem('tema');
+    if (salvo === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      document.getElementById('btnTema').textContent = 'Modo claro';
+    }
+    if (dados.modo === 'mock') document.getElementById('badgeMock').style.display = 'inline-block';
+
+    document.getElementById('btnTema').addEventListener('click', alternarTema);
+    document.getElementById('btnCancelar').addEventListener('click', fecharModal);
+    document.getElementById('btnSalvar').addEventListener('click', salvar);
+    document.getElementById('btnExportar').addEventListener('click', exportarPlanilha);
+    document.getElementById('buscaAluno').addEventListener('input', renderizar);
+    document.getElementById('filtroSerie').addEventListener('change', renderizar);
+    document.getElementById('filtroComponente').addEventListener('change', renderizar);
+    document.getElementById('filtroPago').addEventListener('change', renderizar);
+    document.getElementById('campoAluno').addEventListener('input', aoDigitarAluno);
+    document.getElementById('campoAluno').addEventListener('blur', function () {
+      setTimeout(function () {
+        document.getElementById('listaSugestoes').classList.remove('aberta');
+        resolverAlunoPorTextoExato();
+      }, 150);
+    });
+    document.getElementById('campoAtestado').addEventListener('change', function () {
+      document.getElementById('blocoAtestadoArquivo').style.display = this.checked ? 'flex' : 'none';
+      atualizarValorAutomatico();
+    });
+    document.getElementById('campoArquivoAtestado').addEventListener('change', aoEscolherArquivo);
+    document.getElementById('btnFecharDetalhe').addEventListener('click', fecharDetalheAluno);
+    document.getElementById('btnNovaMateria').addEventListener('click', novaMateriaParaAlunoAtual);
+
+    if (podeEditar) {
+      document.getElementById('btnNovo').addEventListener('click', function () { abrirModal(null); });
+    } else {
+      document.getElementById('btnNovo').style.display = 'none';
+    }
+
+    preencherComponente();
+    preencherFiltroSerie();
+    renderizar();
+  }
+
+  function alternarTema() {
+    var atual = document.documentElement.getAttribute('data-theme');
+    if (atual === 'dark') {
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('tema', 'light');
+      document.getElementById('btnTema').textContent = 'Modo escuro';
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      localStorage.setItem('tema', 'dark');
+      document.getElementById('btnTema').textContent = 'Modo claro';
+    }
+  }
+
+  /* -------------------------------------------------------------------------
+   * PONTE COM O BACKEND — google.script.run.apiRouter(method, payloadJson).
+   * apiRouter devolve sempre uma string JSON; aqui já chega parseada.
+   * ---------------------------------------------------------------------- */
+  function chamar(method, payload) {
+    return new Promise(function (resolve, reject) {
+      google.script.run
+        .withSuccessHandler(function (json) { resolve(json ? JSON.parse(json) : null); })
+        .withFailureHandler(function (erro) { reject(erro); })
+        .apiRouter(method, JSON.stringify(payload || {}));
+    });
+  }
+
+  function recarregar() {
+    return chamar('getBootstrap').then(function (novo) {
+      registros = novo.registros || [];
+      preencherFiltroSerie();
+      renderizar();
+    });
+  }
+
+  function preencherComponente() {
+    var opcoes = '<option value="">Selecione...</option>' +
+      componentes.map(function (c) { return '<option value="' + escaparHtml(c) + '">' + escaparHtml(c) + '</option>'; }).join('');
+    document.getElementById('campoComponente').innerHTML = opcoes;
+
+    var selectFiltro = document.getElementById('filtroComponente');
+    selectFiltro.innerHTML = '<option value="">Todas as matérias</option>' +
+      componentes.map(function (c) { return '<option value="' + escaparHtml(c) + '">' + escaparHtml(c) + '</option>'; }).join('');
+  }
+
+  function preencherFiltroSerie() {
+    var select = document.getElementById('filtroSerie');
+    var atual = select.value;
+    var series = (dados.series || []).map(function (s) { return s.nome; });
+    select.innerHTML = '<option value="">Todas as séries</option>' +
+      series.map(function (s) { return '<option value="' + escaparHtml(s) + '">' + escaparHtml(s) + '</option>'; }).join('');
+    select.value = atual;
+  }
+
+  /** Chave estável de agrupamento — alunoId quando existir; nome+turma como reserva (registro antigo). */
+  function chaveAlunoDe(r) {
+    return r.alunoId || (r.alunoNome + '|' + (r.turma || r.serie || ''));
+  }
+
+  function renderizar() {
+    var busca = document.getElementById('buscaAluno').value.toLowerCase();
+    var serie = document.getElementById('filtroSerie').value;
+    var componente = document.getElementById('filtroComponente').value;
+    var pago = document.getElementById('filtroPago').value;
+
+    var filtrados = registros.filter(function (r) {
+      if (busca && r.alunoNome.toLowerCase().indexOf(busca) === -1) return false;
+      if (serie && r.serie !== serie) return false;
+      if (componente && r.componente !== componente) return false;
+      if (pago === 'SIM' && !r.pago) return false;
+      if (pago === 'NAO' && r.pago) return false;
+      return true;
+    });
+    filtradosAtuais = filtrados;
+
+    document.getElementById('kpiTotal').textContent = registros.length;
+    document.getElementById('kpiPagos').textContent = registros.filter(function (r) { return r.pago; }).length;
+    document.getElementById('kpiPendentes').textContent = registros.filter(function (r) { return !r.pago; }).length;
+    document.getElementById('kpiRealizadas').textContent = registros.filter(function (r) { return r.realizada; }).length;
+
+    // Agrupa por aluno — a tabela mostra 1 linha por aluno, clica pra ver as
+    // matéria dele. Ordem de chegada do primeiro registro de cada aluno.
+    gruposAtuais = {};
+    var ordem = [];
+    filtrados.forEach(function (r) {
+      var chave = chaveAlunoDe(r);
+      if (!gruposAtuais[chave]) {
+        gruposAtuais[chave] = { chave: chave, alunoId: r.alunoId, alunoNome: r.alunoNome, turma: r.turma, serie: r.serie, registros: [] };
+        ordem.push(chave);
+      }
+      gruposAtuais[chave].registros.push(r);
+    });
+
+    var corpo = document.getElementById('corpoTabela');
+    corpo.innerHTML = ordem.map(function (chave) {
+      var g = gruposAtuais[chave];
+      var pagos = g.registros.filter(function (r) { return r.pago; }).length;
+      var pendentes = g.registros.length - pagos;
+      var badges = '';
+      if (pendentes) badges += '<span class="selo selo-pendente">' + pendentes + ' pendente</span> ';
+      if (pagos) badges += '<span class="selo selo-pago">' + pagos + ' pago</span>';
+      return '<tr class="linha-aluno" onclick="abrirDetalheAluno(\'' + chave.replace(/'/g, "\\'") + '\')">' +
+        '<td>' + escaparHtml(g.alunoNome) + '</td>' +
+        '<td>' + escaparHtml(g.turma || g.serie) + '</td>' +
+        '<td>' + g.registros.length + ' prova' + (g.registros.length > 1 ? 's' : '') + '</td>' +
+        '<td>' + badges + '</td>' +
+        '<td>›</td>' +
+      '</tr>';
+    }).join('');
+
+    document.getElementById('vazio').style.display = ordem.length ? 'none' : 'block';
+
+    // Se o detalhe tava aberto pra esse aluno, atualiza o conteúdo dele também.
+    if (chaveDetalheAberto && gruposAtuais[chaveDetalheAberto]) renderDetalhe(gruposAtuais[chaveDetalheAberto]);
+  }
+
+  /* -------------------------------------------------------------------------
+   * DETALHE DO ALUNO — todas as prova de um aluno só, numa tabela dentro do modal.
+   * ---------------------------------------------------------------------- */
+  function abrirDetalheAluno(chave) {
+    var g = gruposAtuais[chave];
+    if (!g) return;
+    chaveDetalheAberto = chave;
+    renderDetalhe(g);
+    document.getElementById('modalDetalheFundo').classList.add('aberto');
+  }
+
+  function fecharDetalheAluno() {
+    chaveDetalheAberto = null;
+    document.getElementById('modalDetalheFundo').classList.remove('aberto');
+  }
+
+  function renderDetalhe(g) {
+    document.getElementById('detalheTitulo').textContent = g.alunoNome;
+    document.getElementById('detalheSub').textContent = 'Turma ' + (g.turma || '—') + ' · Série ' + (g.serie || '—');
+    document.getElementById('btnNovaMateria').style.display = podeEditar ? 'inline-block' : 'none';
+
+    var corpo = document.getElementById('corpoDetalhe');
+    corpo.innerHTML = g.registros.map(function (r) {
+      var acoes = podeEditar
+        ? '<button class="btn ' + (r.pago ? 'btn-fantasma' : 'btn-sucesso') + ' btn-sm" onclick="alternarPago(\'' + r.id + '\', ' + !r.pago + ')">' + (r.pago ? 'Marcar pendente' : 'Marcar pago') + '</button> ' +
+          '<button class="btn btn-fantasma btn-sm" onclick="editar(\'' + r.id + '\')">Editar</button> ' +
+          '<button class="btn btn-perigo btn-sm" onclick="excluir(\'' + r.id + '\')">Excluir</button>'
+        : '';
+      return '<tr>' +
+        '<td>' + escaparHtml(r.componente || '') + '</td>' +
+        '<td>' + escaparHtml(r.prova || '—') + '</td>' +
+        '<td>' + escaparHtml(r.dataRealizacao || '—') + '</td>' +
+        '<td><div class="status-pilha">' +
+          '<span class="selo ' + (r.pago ? 'selo-pago' : 'selo-pendente') + '">' + (r.pago ? 'Pago' : 'Pendente') + '</span>' +
+          '<span class="selo ' + (r.realizada ? 'selo-realizada' : 'selo-nao-realizada') + '">' + (r.realizada ? 'Compareceu' : 'Não compareceu') + '</span>' +
+        '</div></td>' +
+        '<td style="white-space:nowrap">' + acoes + '</td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  /** "+ Nova matéria" dentro do detalhe — abre o cadastro já com o aluno preenchido. */
+  function novaMateriaParaAlunoAtual() {
+    var g = gruposAtuais[chaveDetalheAberto];
+    if (!g) return;
+    fecharDetalheAluno();
+    abrirModal(null);
+    document.getElementById('campoAluno').value = g.alunoNome;
+    document.getElementById('campoAlunoId').value = g.alunoId || '';
+    document.getElementById('campoSerie').value = g.serie || '';
+    document.getElementById('campoTurma').value = g.turma || '';
+  }
+
+  function escaparHtml(texto) {
+    var div = document.createElement('div');
+    div.textContent = texto == null ? '' : String(texto);
+    return div.innerHTML;
+  }
+
+  /* -------------------------------------------------------------------------
+   * AUTOCOMPLETE DE ALUNO — busca em BOOT_DATA.alunos (Azure), sem round-trip.
+   * ---------------------------------------------------------------------- */
+  function aoDigitarAluno() {
+    var termo = document.getElementById('campoAluno').value.trim().toLowerCase();
+    var lista = document.getElementById('listaSugestoes');
+    if (!termo) { lista.classList.remove('aberta'); return; }
+
+    var achados = alunos.filter(function (a) { return a.nome.toLowerCase().indexOf(termo) !== -1; }).slice(0, 8);
+
+    lista.innerHTML = achados.length
+      ? achados.map(function (a) {
+          return '<div class="sugestao-item" onmousedown="selecionarAluno(\'' + a.id + '\')">' +
+            '<span class="nome">' + escaparHtml(a.nome) + '</span>' +
+            '<span class="serie">' + escaparHtml(a.turma || a.serie) + '</span></div>';
+        }).join('')
+      : '<div class="sugestao-vazia">Nenhum aluno encontrado.</div>';
+    lista.classList.add('aberta');
+  }
+
+  /**
+   * Rede de segurança: se a pessoa digitar o nome inteiro na mão (sem clicar
+   * na sugestão), resolve turma/série/alunoId igual assim que sair do campo —
+   * só quando o texto bate exato (sem ambiguidade) com um único aluno.
+   */
+  function resolverAlunoPorTextoExato() {
+    if (document.getElementById('campoAlunoId').value) return; // já resolvido
+    var texto = document.getElementById('campoAluno').value.trim().toLowerCase();
+    if (!texto) return;
+    var achados = alunos.filter(function (a) { return a.nome.toLowerCase() === texto; });
+    if (achados.length === 1) selecionarAluno(achados[0].id);
+  }
+
+  function selecionarAluno(id) {
+    var a = alunos.find(function (x) { return x.id === id; });
+    if (!a) return;
+    document.getElementById('campoAluno').value = a.nome;
+    document.getElementById('campoAlunoId').value = a.id;
+    document.getElementById('campoSerie').value = a.serie;
+    document.getElementById('campoTurma').value = a.turma || '';
+    document.getElementById('listaSugestoes').classList.remove('aberta');
+  }
+
+  /* -------------------------------------------------------------------------
+   * ARQUIVO DO ATESTADO — lido como base64 no navegador, só vira anexo de
+   * verdade quando salvar() manda pro backend (Anexos.gs sobe pro Drive).
+   * ---------------------------------------------------------------------- */
+  function aoEscolherArquivo(ev) {
+    var arquivo = ev.target.files[0];
+    arquivoAtestadoSelecionado = null;
+    if (!arquivo) return;
+
+    if (arquivo.size > 5 * 1024 * 1024) {
+      mostrarErro('Arquivo maior que 5MB. Escolha um arquivo menor.');
+      ev.target.value = '';
+      return;
+    }
+
+    var leitor = new FileReader();
+    leitor.onload = function () {
+      var base64 = String(leitor.result).split(',')[1];
+      arquivoAtestadoSelecionado = { nome: arquivo.name, mimeType: arquivo.type, base64: base64 };
+    };
+    leitor.readAsDataURL(arquivo);
+  }
+
+  /* -------------------------------------------------------------------------
+   * MODAL / CRUD
+   * ---------------------------------------------------------------------- */
+  function abrirModal(registro) {
+    arquivoAtestadoSelecionado = null;
+    document.getElementById('campoArquivoAtestado').value = '';
+
+    document.getElementById('modalTitulo').textContent = registro ? 'Editar registro' : 'Novo registro';
+    document.getElementById('campoId').value = registro ? registro.id : '';
+    document.getElementById('campoAlunoId').value = registro ? registro.alunoId : '';
+    document.getElementById('campoAluno').value = registro ? registro.alunoNome : '';
+    document.getElementById('campoSerie').value = registro ? registro.serie : '';
+    document.getElementById('campoTurma').value = registro ? (registro.turma || '') : '';
+    document.getElementById('campoComponente').value = registro ? (registro.componente || '') : '';
+    document.getElementById('campoProva').value = registro ? (registro.prova || '') : '';
+    document.getElementById('campoMotivo').value = registro ? registro.motivo : '';
+    document.getElementById('campoObservacoes').value = registro ? registro.observacoes : '';
+    document.getElementById('campoPago').checked = registro ? registro.pago : false;
+
+    var atestado = registro ? !!registro.atestado : false;
+    document.getElementById('campoAtestado').checked = atestado;
+    document.getElementById('blocoAtestadoArquivo').style.display = atestado ? 'flex' : 'none';
+    atualizarValorAutomatico();
+    document.getElementById('campoAtestadoArquivoUrl').value = registro ? (registro.atestadoArquivoUrl || '') : '';
+    document.getElementById('campoAtestadoArquivoNome').value = registro ? (registro.atestadoArquivoNome || '') : '';
+    var link = document.getElementById('linkAtestadoAtual');
+    if (registro && registro.atestadoArquivoUrl) {
+      link.href = registro.atestadoArquivoUrl;
+      link.textContent = 'Ver arquivo já anexado (' + (registro.atestadoArquivoNome || 'atestado') + ')';
+      link.style.display = 'inline';
+    } else {
+      link.style.display = 'none';
+    }
+
+    document.getElementById('campoRealizada').checked = registro ? !!registro.realizada : false;
+    document.getElementById('campoDataRealizacao').value = registro ? (registro.dataRealizacao || '') : '';
+
+    document.getElementById('modalFundo').classList.add('aberto');
+  }
+
+  function fecharModal() {
+    document.getElementById('modalFundo').classList.remove('aberto');
+  }
+
+  function editar(id) {
+    var registro = registros.find(function (r) { return r.id === id; });
+    if (registro) abrirModal(registro);
+  }
+
+  function salvar() {
+    var id = document.getElementById('campoId').value;
+    var dadosForm = {
+      alunoId: document.getElementById('campoAlunoId').value,
+      alunoNome: document.getElementById('campoAluno').value.trim(),
+      serie: document.getElementById('campoSerie').value.trim(),
+      turma: document.getElementById('campoTurma').value.trim(),
+      componente: document.getElementById('campoComponente').value,
+      prova: document.getElementById('campoProva').value.trim(),
+      motivo: document.getElementById('campoMotivo').value.trim(),
+      observacoes: document.getElementById('campoObservacoes').value.trim(),
+      valor: document.getElementById('campoValor').value === '' ? null : Number(document.getElementById('campoValor').value),
+      pago: document.getElementById('campoPago').checked,
+      atestado: document.getElementById('campoAtestado').checked,
+      realizada: document.getElementById('campoRealizada').checked,
+      dataRealizacao: document.getElementById('campoDataRealizacao').value
+    };
+    if (arquivoAtestadoSelecionado) dadosForm.arquivoAtestado = arquivoAtestadoSelecionado;
+
+    if (!dadosForm.alunoId || !dadosForm.alunoNome) {
+      mostrarErro('Escolha o aluno clicando numa sugestão da lista — nome digitado sozinho não basta.');
+      return;
+    }
+    if (!dadosForm.componente || !dadosForm.motivo) {
+      mostrarErro('Preencha matéria e motivo.');
+      return;
+    }
+
+    document.getElementById('btnSalvar').disabled = true;
+    var eraNovo = !id;
+    var chamada = id
+      ? chamar('atualizarRegistro', { id: id, dados: dadosForm })
+      : chamar('criarRegistro', { dados: dadosForm });
+
+    chamada.then(function () {
+      document.getElementById('btnSalvar').disabled = false;
+      if (eraNovo) {
+        // Aluno costuma perder mais de uma matéria de uma vez — mantém aluno
+        // selecionado e limpa só o resto, pra lançar a próxima na sequência.
+        prepararProximaMateria();
+        mostrarToast('Salvo! Lance a próxima matéria do mesmo aluno, ou Cancelar pra fechar.');
+      } else {
+        fecharModal();
+        mostrarToast('Salvo com sucesso.');
+      }
+      return recarregar();
+    }).catch(function (erro) {
+      document.getElementById('btnSalvar').disabled = false;
+      mostrarErro(erro);
+    });
+  }
+
+  /** Limpa só os campos da prova (mantém aluno/turma/série), pra próxima matéria do mesmo aluno. */
+  function prepararProximaMateria() {
+    document.getElementById('campoComponente').value = '';
+    document.getElementById('campoProva').value = '';
+    document.getElementById('campoMotivo').value = '';
+    document.getElementById('campoObservacoes').value = '';
+    document.getElementById('campoPago').checked = false;
+    document.getElementById('campoAtestado').checked = false;
+    document.getElementById('blocoAtestadoArquivo').style.display = 'none';
+    atualizarValorAutomatico();
+    document.getElementById('campoArquivoAtestado').value = '';
+    document.getElementById('campoAtestadoArquivoUrl').value = '';
+    document.getElementById('campoAtestadoArquivoNome').value = '';
+    document.getElementById('linkAtestadoAtual').style.display = 'none';
+    document.getElementById('campoRealizada').checked = false;
+    document.getElementById('campoDataRealizacao').value = '';
+    arquivoAtestadoSelecionado = null;
+    document.getElementById('campoComponente').focus();
+  }
+
+  function alternarPago(id, pago) {
+    chamar('marcarPago', { id: id, pago: pago }).then(function () {
+      mostrarToast(pago ? 'Marcado como pago.' : 'Marcado como pendente.');
+      return recarregar();
+    }).catch(mostrarErro);
+  }
+
+  function excluir(id) {
+    if (!confirm('Excluir este registro?')) return;
+    chamar('excluirRegistro', { id: id }).then(function () {
+      mostrarToast('Registro excluído.');
+      return recarregar();
+    }).catch(mostrarErro);
+  }
+
+  /* -------------------------------------------------------------------------
+   * EXPORTAR PLANILHA — gerado no navegador (SheetJS), sem round-trip.
+   * ---------------------------------------------------------------------- */
+  /**
+   * Formato pedido: 1 linha por aluno+dia de avaliação (não por matéria),
+   * matérias perdidas naquele dia juntas numa célula, soma do dia e soma
+   * total do aluno (repetida em toda linha dele).
+   */
+  function exportarPlanilha() {
+    if (!filtradosAtuais.length) { mostrarErro('Nada pra exportar com esse filtro.'); return; }
+
+    var porAlunoDia = {};
+    var ordem = [];
+    filtradosAtuais.forEach(function (r) {
+      var chaveAluno = r.alunoId || r.alunoNome;
+      var chave = chaveAluno + '|' + (r.dataRealizacao || '');
+      if (!porAlunoDia[chave]) {
+        porAlunoDia[chave] = { chaveAluno: chaveAluno, alunoNome: r.alunoNome, turma: r.turma || r.serie, data: r.dataRealizacao || '', itens: [] };
+        ordem.push(chave);
+      }
+      porAlunoDia[chave].itens.push(r);
+    });
+
+    var totalPorAluno = {};
+    filtradosAtuais.forEach(function (r) {
+      var chaveAluno = r.alunoId || r.alunoNome;
+      totalPorAluno[chaveAluno] = (totalPorAluno[chaveAluno] || 0) + (r.valor || 0);
+    });
+
+    // Ordena por dia (vazio por último) e, dentro do dia, por aluno.
+    ordem.sort(function (a, b) {
+      var ga = porAlunoDia[a], gb = porAlunoDia[b];
+      var da = ga.data || '9999-99-99', db = gb.data || '9999-99-99';
+      if (da !== db) return da < db ? -1 : 1;
+      return ga.alunoNome.localeCompare(gb.alunoNome, 'pt-BR');
+    });
+
+    var linhas = ordem.map(function (chave) {
+      var g = porAlunoDia[chave];
+      var somaDia = g.itens.reduce(function (s, r) { return s + (r.valor || 0); }, 0);
+      return {
+        'Dia da Avaliação': g.data,
+        'Turma Aluno': g.turma || '',
+        'Nome Estudante': g.alunoNome,
+        'Avaliações Perdidas no dia': g.itens.map(function (r) { return r.componente || ''; }).join(', '),
+        'Valor cada Avaliação': g.itens.map(function (r) { return r.valor == null ? '' : r.valor; }).join(', '),
+        'Soma Por dia de Avaliações': somaDia,
+        'Soma Total por Estudante': totalPorAluno[g.chaveAluno]
+      };
+    });
+
+    var planilha = XLSX.utils.json_to_sheet(linhas);
+    var livro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(livro, planilha, 'Registros');
+    var marcador = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(livro, 'provas-substitutivas-' + marcador + '.xlsx');
+  }
+
+  function mostrarToast(mensagem) {
+    var toast = document.getElementById('toast');
+    toast.textContent = mensagem;
+    toast.className = 'toast mostrar';
+    setTimeout(function () { toast.className = 'toast'; }, 2600);
+  }
+
+  function mostrarErro(erro) {
+    var toast = document.getElementById('toast');
+    toast.textContent = erro.message || erro;
+    toast.className = 'toast mostrar erro';
+    setTimeout(function () { toast.className = 'toast'; }, 3600);
+  }
+
+  aoCarregar();
+</script>

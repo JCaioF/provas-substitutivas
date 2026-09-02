@@ -1,0 +1,11 @@
+node_modules/
+.clasprc.json
+
+python/.venv/
+python/__pycache__/
+python/.env
+python/credenciais.json
+python/backups/
+python/*.png
+
+.impeccable/

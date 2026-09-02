@@ -1,0 +1,14 @@
+{
+  "name": "provas-substitutivas",
+  "private": true,
+  "scripts": {
+    "clasp:login": "clasp login",
+    "clasp:push": "clasp push",
+    "clasp:watch": "clasp push --watch",
+    "clasp:open": "clasp open",
+    "clasp:deploy": "clasp deploy"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.4.2"
+  }
+}

@@ -1,0 +1,6 @@
+gspread>=6.0
+google-auth>=2.30
+python-dotenv>=1.0
+pandas>=2.2
+matplotlib>=3.9
+openpyxl>=3.1
