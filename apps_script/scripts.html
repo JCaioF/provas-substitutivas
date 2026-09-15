@@ -144,8 +144,9 @@
 
     document.getElementById('kpiTotal').textContent = registros.length;
     document.getElementById('kpiPagos').textContent = registros.filter(function (r) { return r.pago; }).length;
-    document.getElementById('kpiPendentes').textContent = registros.filter(function (r) { return !r.pago; }).length;
+    document.getElementById('kpiPendentes').textContent = registros.filter(function (r) { return !r.pago && !r.atestado; }).length;
     document.getElementById('kpiRealizadas').textContent = registros.filter(function (r) { return r.realizada; }).length;
+    document.getElementById('kpiAtestados').textContent = registros.filter(function (r) { return r.atestado; }).length;
 
     // Agrupa por aluno — a tabela mostra 1 linha por aluno, clica pra ver as
     // matéria dele. Ordem de chegada do primeiro registro de cada aluno.
@@ -208,8 +209,10 @@
 
     var corpo = document.getElementById('corpoDetalhe');
     corpo.innerHTML = g.registros.map(function (r) {
+      var botaoPago = r.atestado ? '' :
+        '<button class="btn ' + (r.pago ? 'btn-fantasma' : 'btn-sucesso') + ' btn-sm" onclick="alternarPago(\'' + r.id + '\', ' + !r.pago + ')">' + (r.pago ? 'Marcar pendente' : 'Marcar pago') + '</button> ';
       var acoes = podeEditar
-        ? '<button class="btn ' + (r.pago ? 'btn-fantasma' : 'btn-sucesso') + ' btn-sm" onclick="alternarPago(\'' + r.id + '\', ' + !r.pago + ')">' + (r.pago ? 'Marcar pendente' : 'Marcar pago') + '</button> ' +
+        ? botaoPago +
           '<button class="btn btn-fantasma btn-sm" onclick="editar(\'' + r.id + '\')">Editar</button> ' +
           '<button class="btn btn-perigo btn-sm" onclick="excluir(\'' + r.id + '\')">Excluir</button>'
         : '';
