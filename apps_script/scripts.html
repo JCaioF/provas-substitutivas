@@ -164,8 +164,8 @@
     corpo.innerHTML = ordem.map(function (chave) {
       var g = gruposAtuais[chave];
       var pagos = g.registros.filter(function (r) { return r.pago; }).length;
-      var pendentes = g.registros.length - pagos;
       var atestados = g.registros.filter(function (r) { return r.atestado; }).length;
+      var pendentes = g.registros.length - pagos - atestados;
       var badges = '';
       if (pendentes) badges += '<span class="selo selo-pendente">' + pendentes + ' pendente</span> ';
       if (pagos) badges += '<span class="selo selo-pago">' + pagos + ' pago</span> ';
@@ -218,7 +218,7 @@
         '<td>' + escaparHtml(r.prova || '—') + '</td>' +
         '<td>' + escaparHtml(r.dataRealizacao || '—') + '</td>' +
         '<td><div class="status-pilha">' +
-          '<span class="selo ' + (r.pago ? 'selo-pago' : 'selo-pendente') + '">' + (r.pago ? 'Pago' : 'Pendente') + '</span>' +
+          (r.atestado ? '' : '<span class="selo ' + (r.pago ? 'selo-pago' : 'selo-pendente') + '">' + (r.pago ? 'Pago' : 'Pendente') + '</span>') +
           '<span class="selo ' + (r.realizada ? 'selo-realizada' : 'selo-nao-realizada') + '">' + (r.realizada ? 'Compareceu' : 'Não compareceu') + '</span>' +
           (r.atestado ? '<span class="selo selo-atestado">Atestado</span>' : '') +
         '</div></td>' +
