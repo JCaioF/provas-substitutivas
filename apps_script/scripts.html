@@ -57,7 +57,7 @@
       gerarPlanilha(registrosDoPeriodo().filter(function (r) { return !r.atestado && !r.pago; }), 'cobranca-pendente');
     });
     document.getElementById('seletorAno').addEventListener('change', mudarAnoLetivo);
-    document.getElementById('seletorSemestre').addEventListener('change', renderizar);
+    document.getElementById('seletorTrimestre').addEventListener('change', renderizar);
 
     if (podeEditar) {
       document.getElementById('btnNovo').addEventListener('click', function () { abrirModal(null); });
@@ -67,17 +67,17 @@
 
     preencherComponente();
     preencherFiltroSerie();
-    preencherSeletorAnoSemestre();
+    preencherSeletorAnoTrimestre();
     renderizar();
   }
 
   /* -------------------------------------------------------------------------
-   * ANO LETIVO / SEMESTRE — o registro não guarda essa informação; ano/semestre
+   * ANO LETIVO / TRIMESTRE — o registro não guarda essa informação; ano/trimestre
    * são derivados da data (dataRealizacao, ou criadoEm quando ainda não tem
    * data marcada). Trocar o ano também recarrega a lista de aluno do Azure
    * (autocomplete), igual o dashboard de saídas pedagógicas faz com passeio.
    * ---------------------------------------------------------------------- */
-  function preencherSeletorAnoSemestre() {
+  function preencherSeletorAnoTrimestre() {
     var anoAtual = dados.ano || new Date().getFullYear();
     var anos = (dados.anosDisponiveis && dados.anosDisponiveis.length) ? dados.anosDisponiveis.slice() : [anoAtual];
     if (anos.indexOf(anoAtual) < 0) anos.push(anoAtual);
@@ -87,8 +87,8 @@
     seletorAno.innerHTML = anos.map(function (a) { return '<option value="' + a + '">' + a + '</option>'; }).join('');
     seletorAno.value = anoAtual;
 
-    // Semestre corrente de verdade (mês 1-6 = 1º, 7-12 = 2º), só na 1ª carga.
-    document.getElementById('seletorSemestre').value = (new Date().getMonth() + 1) <= 6 ? '1' : '2';
+    // Padrão sempre 1º Trimestre — não advinha pelo mês de hoje.
+    document.getElementById('seletorTrimestre').value = '1';
   }
 
   function mudarAnoLetivo() {
@@ -103,21 +103,22 @@
     }).catch(mostrarErro);
   }
 
-  /** yyyy-mm-dd (ou o ISO completo do criadoEm) -> {ano, semestre}. */
+  /** yyyy-mm-dd (ou o ISO completo do criadoEm) -> {ano, trimestre}. Jan-Abr=1º, Mai-Ago=2º, Set-Dez=3º. */
   function periodoDoRegistro(r) {
     var data = r.dataRealizacao || r.criadoEm || '';
     var ano = Number(data.slice(0, 4));
     var mes = Number(data.slice(5, 7));
-    return { ano: ano || null, semestre: mes && mes <= 6 ? '1' : '2' };
+    var trimestre = !mes ? null : (mes <= 4 ? '1' : (mes <= 8 ? '2' : '3'));
+    return { ano: ano || null, trimestre: trimestre };
   }
 
-  /** Registros do ano+semestre selecionado nos pills do topo. */
+  /** Registros do ano+trimestre selecionado nos pills do topo. */
   function registrosDoPeriodo() {
     var ano = Number(document.getElementById('seletorAno').value);
-    var semestre = document.getElementById('seletorSemestre').value;
+    var trimestre = document.getElementById('seletorTrimestre').value;
     return registros.filter(function (r) {
       var p = periodoDoRegistro(r);
-      return p.ano === ano && p.semestre === semestre;
+      return p.ano === ano && p.trimestre === trimestre;
     });
   }
 
@@ -148,8 +149,10 @@
   }
 
   function recarregar() {
-    return chamar('getBootstrap').then(function (novo) {
+    var ano = document.getElementById('seletorAno').value;
+    return chamar('getBootstrap', { ano: ano }).then(function (novo) {
       registros = novo.registros || [];
+      alunos = novo.alunos || [];
       preencherFiltroSerie();
       renderizar();
     });
@@ -257,7 +260,7 @@
     document.getElementById('abaCobranca').classList.toggle('ativa', nome === 'cobranca');
   }
 
-  /** Aluno com pelo menos 1 matéria pendente de pagamento (sem atestado), no ano/semestre selecionado. */
+  /** Aluno com pelo menos 1 matéria pendente de pagamento (sem atestado), no ano/trimestre selecionado. */
   function renderCobranca() {
     var porAluno = {};
     var ordem = [];
