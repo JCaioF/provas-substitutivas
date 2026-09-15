@@ -34,6 +34,7 @@
     document.getElementById('btnCancelar').addEventListener('click', fecharModal);
     document.getElementById('btnSalvar').addEventListener('click', salvar);
     document.getElementById('btnExportar').addEventListener('click', exportarPlanilha);
+    document.getElementById('btnExportarSemAtestado').addEventListener('click', exportarRelatorioSemAtestado);
     document.getElementById('buscaAluno').addEventListener('input', renderizar);
     document.getElementById('filtroSerie').addEventListener('change', renderizar);
     document.getElementById('filtroComponente').addEventListener('change', renderizar);
@@ -459,11 +460,20 @@
    * total do aluno (repetida em toda linha dele).
    */
   function exportarPlanilha() {
-    if (!filtradosAtuais.length) { mostrarErro('Nada pra exportar com esse filtro.'); return; }
+    gerarPlanilha(filtradosAtuais, 'provas-substitutivas');
+  }
+
+  /** Relatório de pagamento — só quem NÃO tem atestado, sempre (ignora os filtros da tela). */
+  function exportarRelatorioSemAtestado() {
+    gerarPlanilha(registros.filter(function (r) { return !r.atestado; }), 'provas-substitutivas-sem-atestado');
+  }
+
+  function gerarPlanilha(lista, prefixoArquivo) {
+    if (!lista.length) { mostrarErro('Nada pra exportar.'); return; }
 
     var porAlunoDia = {};
     var ordem = [];
-    filtradosAtuais.forEach(function (r) {
+    lista.forEach(function (r) {
       var chaveAluno = r.alunoId || r.alunoNome;
       var chave = chaveAluno + '|' + (r.dataRealizacao || '');
       if (!porAlunoDia[chave]) {
@@ -474,7 +484,7 @@
     });
 
     var totalPorAluno = {};
-    filtradosAtuais.forEach(function (r) {
+    lista.forEach(function (r) {
       var chaveAluno = r.alunoId || r.alunoNome;
       totalPorAluno[chaveAluno] = (totalPorAluno[chaveAluno] || 0) + (r.valor || 0);
     });
@@ -505,7 +515,7 @@
     var livro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(livro, planilha, 'Registros');
     var marcador = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(livro, 'provas-substitutivas-' + marcador + '.xlsx');
+    XLSX.writeFile(livro, prefixoArquivo + '-' + marcador + '.xlsx');
   }
 
   function mostrarToast(mensagem) {
