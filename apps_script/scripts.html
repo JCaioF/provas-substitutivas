@@ -10,12 +10,16 @@
   var arquivoAtestadoSelecionado = null;
   var VALOR_PADRAO_SUB = 103;
 
-  /** Com atestado, isento (0); sem atestado, valor fixo da substitutiva. */
+  /** Com atestado, isento (0) e não paga; sem atestado, valor fixo da substitutiva. */
   function atualizarValorAutomatico() {
     var temAtestado = document.getElementById('campoAtestado').checked;
     var campoValor = document.getElementById('campoValor');
     campoValor.value = temAtestado ? 0 : VALOR_PADRAO_SUB;
     campoValor.readOnly = true;
+
+    var campoPago = document.getElementById('campoPago');
+    campoPago.disabled = temAtestado;
+    if (temAtestado) campoPago.checked = false;
   }
 
   function aoCarregar() {
@@ -34,6 +38,7 @@
     document.getElementById('filtroSerie').addEventListener('change', renderizar);
     document.getElementById('filtroComponente').addEventListener('change', renderizar);
     document.getElementById('filtroPago').addEventListener('change', renderizar);
+    document.getElementById('filtroAtestado').addEventListener('change', renderizar);
     document.getElementById('campoAluno').addEventListener('input', aoDigitarAluno);
     document.getElementById('campoAluno').addEventListener('blur', function () {
       setTimeout(function () {
@@ -123,6 +128,7 @@
     var serie = document.getElementById('filtroSerie').value;
     var componente = document.getElementById('filtroComponente').value;
     var pago = document.getElementById('filtroPago').value;
+    var atestado = document.getElementById('filtroAtestado').value;
 
     var filtrados = registros.filter(function (r) {
       if (busca && r.alunoNome.toLowerCase().indexOf(busca) === -1) return false;
@@ -130,6 +136,8 @@
       if (componente && r.componente !== componente) return false;
       if (pago === 'SIM' && !r.pago) return false;
       if (pago === 'NAO' && r.pago) return false;
+      if (atestado === 'SIM' && !r.atestado) return false;
+      if (atestado === 'NAO' && r.atestado) return false;
       return true;
     });
     filtradosAtuais = filtrados;
@@ -157,9 +165,11 @@
       var g = gruposAtuais[chave];
       var pagos = g.registros.filter(function (r) { return r.pago; }).length;
       var pendentes = g.registros.length - pagos;
+      var atestados = g.registros.filter(function (r) { return r.atestado; }).length;
       var badges = '';
       if (pendentes) badges += '<span class="selo selo-pendente">' + pendentes + ' pendente</span> ';
-      if (pagos) badges += '<span class="selo selo-pago">' + pagos + ' pago</span>';
+      if (pagos) badges += '<span class="selo selo-pago">' + pagos + ' pago</span> ';
+      if (atestados) badges += '<span class="selo selo-atestado">' + atestados + ' atestado</span>';
       return '<tr class="linha-aluno" onclick="abrirDetalheAluno(\'' + chave.replace(/'/g, "\\'") + '\')">' +
         '<td>' + escaparHtml(g.alunoNome) + '</td>' +
         '<td>' + escaparHtml(g.turma || g.serie) + '</td>' +
@@ -210,6 +220,7 @@
         '<td><div class="status-pilha">' +
           '<span class="selo ' + (r.pago ? 'selo-pago' : 'selo-pendente') + '">' + (r.pago ? 'Pago' : 'Pendente') + '</span>' +
           '<span class="selo ' + (r.realizada ? 'selo-realizada' : 'selo-nao-realizada') + '">' + (r.realizada ? 'Compareceu' : 'Não compareceu') + '</span>' +
+          (r.atestado ? '<span class="selo selo-atestado">Atestado</span>' : '') +
         '</div></td>' +
         '<td style="white-space:nowrap">' + acoes + '</td>' +
       '</tr>';
