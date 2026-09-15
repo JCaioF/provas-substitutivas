@@ -25,7 +25,12 @@
     </div>
   </div>
 
-  <div class="conteudo">
+  <div class="abas">
+    <button class="aba ativa" id="abaRegistros" type="button">Registros</button>
+    <button class="aba" id="abaCobranca" type="button">Cobrança</button>
+  </div>
+
+  <div class="conteudo" id="viewRegistros">
 
     <div class="kpis">
       <div class="kpi total"><div class="valor" id="kpiTotal">0</div><div class="rotulo">Total de registros</div></div>
@@ -72,6 +77,26 @@
       </div>
     </div>
 
+  </div>
+
+  <div class="conteudo" id="viewCobranca" style="display:none">
+    <div class="painel">
+      <div class="painel-topo">
+        <div class="sub" style="margin:0">Aluno com matéria pendente de pagamento (sem atestado)</div>
+        <button class="btn btn-fantasma" id="btnExportarCobranca" type="button">Exportar cobrança</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Aluno</th><th>Turma</th><th>Pendente desde</th><th>Matérias</th><th>Valor devido</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="corpoCobranca"></tbody>
+        </table>
+        <div class="vazio" id="vazioCobranca" style="display:none">Nenhuma cobrança pendente.</div>
+      </div>
+    </div>
   </div>
 
   <div class="modal-fundo" id="modalDetalheFundo">

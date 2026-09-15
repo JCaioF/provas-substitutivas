@@ -54,6 +54,11 @@
     document.getElementById('campoArquivoAtestado').addEventListener('change', aoEscolherArquivo);
     document.getElementById('btnFecharDetalhe').addEventListener('click', fecharDetalheAluno);
     document.getElementById('btnNovaMateria').addEventListener('click', novaMateriaParaAlunoAtual);
+    document.getElementById('abaRegistros').addEventListener('click', function () { mostrarAba('registros'); });
+    document.getElementById('abaCobranca').addEventListener('click', function () { mostrarAba('cobranca'); });
+    document.getElementById('btnExportarCobranca').addEventListener('click', function () {
+      gerarPlanilha(registros.filter(function (r) { return !r.atestado && !r.pago; }), 'cobranca-pendente');
+    });
 
     if (podeEditar) {
       document.getElementById('btnNovo').addEventListener('click', function () { abrirModal(null); });
@@ -183,15 +188,67 @@
 
     document.getElementById('vazio').style.display = ordem.length ? 'none' : 'block';
 
+    renderCobranca();
+
     // Se o detalhe tava aberto pra esse aluno, atualiza o conteúdo dele também.
-    if (chaveDetalheAberto && gruposAtuais[chaveDetalheAberto]) renderDetalhe(gruposAtuais[chaveDetalheAberto]);
+    if (chaveDetalheAberto) {
+      var atual = grupoDoAlunoPorChave(chaveDetalheAberto);
+      if (atual) renderDetalhe(atual);
+    }
+  }
+
+  /* -------------------------------------------------------------------------
+   * ABAS — Registros (tabela de cadastro) e Cobrança (quem deve pagar).
+   * ---------------------------------------------------------------------- */
+  function mostrarAba(nome) {
+    document.getElementById('viewRegistros').style.display = nome === 'registros' ? 'block' : 'none';
+    document.getElementById('viewCobranca').style.display = nome === 'cobranca' ? 'block' : 'none';
+    document.getElementById('abaRegistros').classList.toggle('ativa', nome === 'registros');
+    document.getElementById('abaCobranca').classList.toggle('ativa', nome === 'cobranca');
+  }
+
+  /** Aluno com pelo menos 1 matéria pendente de pagamento (sem atestado) — sempre sobre TUDO, ignora os filtros da aba Registros. */
+  function renderCobranca() {
+    var porAluno = {};
+    var ordem = [];
+    registros.filter(function (r) { return !r.atestado && !r.pago; }).forEach(function (r) {
+      var chave = chaveAlunoDe(r);
+      if (!porAluno[chave]) { porAluno[chave] = { chave: chave, alunoNome: r.alunoNome, turma: r.turma || r.serie, itens: [] }; ordem.push(chave); }
+      porAluno[chave].itens.push(r);
+    });
+    ordem.sort(function (a, b) { return porAluno[a].alunoNome.localeCompare(porAluno[b].alunoNome, 'pt-BR'); });
+
+    var corpo = document.getElementById('corpoCobranca');
+    corpo.innerHTML = ordem.map(function (chave) {
+      var g = porAluno[chave];
+      var valor = g.itens.reduce(function (s, r) { return s + (r.valor || 0); }, 0);
+      var datas = g.itens.map(function (r) { return r.dataRealizacao || r.criadoEm || ''; }).filter(Boolean).sort();
+      var desde = datas.length ? datas[0].slice(0, 10) : '—';
+      return '<tr class="linha-aluno" onclick="abrirDetalheAluno(\'' + chave.replace(/'/g, "\\'") + '\')">' +
+        '<td>' + escaparHtml(g.alunoNome) + '</td>' +
+        '<td>' + escaparHtml(g.turma) + '</td>' +
+        '<td>' + desde + '</td>' +
+        '<td>' + g.itens.length + '</td>' +
+        '<td>R$ ' + valor.toFixed(2).replace('.', ',') + '</td>' +
+        '<td>›</td>' +
+      '</tr>';
+    }).join('');
+
+    document.getElementById('vazioCobranca').style.display = ordem.length ? 'none' : 'block';
   }
 
   /* -------------------------------------------------------------------------
    * DETALHE DO ALUNO — todas as prova de um aluno só, numa tabela dentro do modal.
    * ---------------------------------------------------------------------- */
+  /** Monta o grupo direto de `registros` (fonte completa) — funciona vindo de qualquer aba/filtro. */
+  function grupoDoAlunoPorChave(chave) {
+    var itens = registros.filter(function (r) { return chaveAlunoDe(r) === chave; });
+    if (!itens.length) return null;
+    return { chave: chave, alunoId: itens[0].alunoId, alunoNome: itens[0].alunoNome, turma: itens[0].turma, serie: itens[0].serie, registros: itens };
+  }
+
   function abrirDetalheAluno(chave) {
-    var g = gruposAtuais[chave];
+    var g = grupoDoAlunoPorChave(chave);
     if (!g) return;
     chaveDetalheAberto = chave;
     renderDetalhe(g);
@@ -233,7 +290,7 @@
 
   /** "+ Nova matéria" dentro do detalhe — abre o cadastro já com o aluno preenchido. */
   function novaMateriaParaAlunoAtual() {
-    var g = gruposAtuais[chaveDetalheAberto];
+    var g = grupoDoAlunoPorChave(chaveDetalheAberto);
     if (!g) return;
     fecharDetalheAluno();
     abrirModal(null);
