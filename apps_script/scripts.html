@@ -4,7 +4,6 @@
   var alunos = dados.alunos || [];
   var componentes = dados.componentes || [];
   var podeEditar = dados.perfil === 'editor';
-  var filtradosAtuais = [];
   var gruposAtuais = {};
   var chaveDetalheAberto = null;
   var arquivoAtestadoSelecionado = null;
@@ -33,8 +32,6 @@
     document.getElementById('btnTema').addEventListener('click', alternarTema);
     document.getElementById('btnCancelar').addEventListener('click', fecharModal);
     document.getElementById('btnSalvar').addEventListener('click', salvar);
-    document.getElementById('btnExportar').addEventListener('click', exportarPlanilha);
-    document.getElementById('btnExportarSemAtestado').addEventListener('click', exportarRelatorioSemAtestado);
     document.getElementById('buscaAluno').addEventListener('input', renderizar);
     document.getElementById('filtroSerie').addEventListener('change', renderizar);
     document.getElementById('filtroComponente').addEventListener('change', renderizar);
@@ -146,7 +143,6 @@
       if (atestado === 'NAO' && r.atestado) return false;
       return true;
     });
-    filtradosAtuais = filtrados;
 
     document.getElementById('kpiTotal').textContent = registros.length;
     document.getElementById('kpiPagos').textContent = registros.filter(function (r) { return r.pago; }).length;
@@ -510,21 +506,12 @@
 
   /* -------------------------------------------------------------------------
    * EXPORTAR PLANILHA — gerado no navegador (SheetJS), sem round-trip.
+   * Único ponto de saída pra arquivo é a aba Cobrança (ver btnExportarCobranca).
+   *
+   * Formato: 1 linha por aluno+dia de avaliação (não por matéria), matérias
+   * perdidas naquele dia juntas numa célula, soma do dia e soma total do
+   * aluno (repetida em toda linha dele).
    * ---------------------------------------------------------------------- */
-  /**
-   * Formato pedido: 1 linha por aluno+dia de avaliação (não por matéria),
-   * matérias perdidas naquele dia juntas numa célula, soma do dia e soma
-   * total do aluno (repetida em toda linha dele).
-   */
-  function exportarPlanilha() {
-    gerarPlanilha(filtradosAtuais, 'provas-substitutivas');
-  }
-
-  /** Relatório de pagamento — só quem NÃO tem atestado, sempre (ignora os filtros da tela). */
-  function exportarRelatorioSemAtestado() {
-    gerarPlanilha(registros.filter(function (r) { return !r.atestado; }), 'provas-substitutivas-sem-atestado');
-  }
-
   function gerarPlanilha(lista, prefixoArquivo) {
     if (!lista.length) { mostrarErro('Nada pra exportar.'); return; }
 
