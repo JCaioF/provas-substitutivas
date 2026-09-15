@@ -78,12 +78,20 @@ var RegistrosService = (function () {
     return SheetStore.marcarPago(id, !!pago);
   }
 
-  /** Tudo que a tela precisa pra abrir, numa chamada só (evita 2 round-trips no cold start). */
-  function getBootstrap() {
-    var ref = AlunosService.getReferencia();
+  /**
+   * Tudo que a tela precisa pra abrir, numa chamada só (evita round-trips
+   * extras no cold start). `ano` troca de qual ano letivo o Azure puxa a
+   * lista de aluno (pro autocomplete) — os registros em si não têm ano
+   * gravado, a tela filtra por ano/semestre na hora olhando a data.
+   */
+  function getBootstrap(ano) {
+    ano = Number(ano) || AlunosService.anoPadrao();
+    var ref = AlunosService.getReferencia(ano);
     return {
       perfil: Config.perfil(getCurrentUser()),
       modo: Config.useMock() ? 'mock' : 'azure',
+      ano: ano,
+      anosDisponiveis: AzureSQLService.getAnos(),
       alunos: ref.alunos,
       series: ref.series,
       componentes: COMPONENTES,

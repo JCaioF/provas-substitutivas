@@ -5,9 +5,9 @@ var AlunosService = (function () {
     return new Date().getFullYear();
   }
 
-  /** {alunos, series} do ano letivo corrente — usado pra popular o autocomplete. */
-  function getReferencia() {
-    return AzureSQLService.getReferencia(anoPadrao());
+  /** {alunos, series} do ano letivo — usado pra popular o autocomplete. */
+  function getReferencia(ano) {
+    return AzureSQLService.getReferencia(Number(ano) || anoPadrao());
   }
 
   return { anoPadrao: anoPadrao, getReferencia: getReferencia };

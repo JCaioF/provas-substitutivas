@@ -58,6 +58,19 @@
     cursor: pointer;
     font-size: 13px;
   }
+  .pill-seletor {
+    display: flex; flex-direction: column; gap: 2px;
+    background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.28);
+    border-radius: 12px; padding: 5px 12px;
+  }
+  .pill-rotulo { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: rgba(255,255,255,.75); }
+  .pill-seletor select {
+    background: transparent; border: none; color: #fff; font-weight: 800; font-size: 14px;
+    padding: 0; border-radius: 0; font-family: "Plus Jakarta Sans", sans-serif;
+  }
+  .pill-seletor select:focus { outline: none; }
+  .pill-seletor select option { color: var(--app-text); }
+
   .badge-mock {
     background: rgba(255,255,255,.15);
     border: 1px solid rgba(255,255,255,.3);

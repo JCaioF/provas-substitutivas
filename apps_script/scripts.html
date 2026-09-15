@@ -54,8 +54,10 @@
     document.getElementById('abaRegistros').addEventListener('click', function () { mostrarAba('registros'); });
     document.getElementById('abaCobranca').addEventListener('click', function () { mostrarAba('cobranca'); });
     document.getElementById('btnExportarCobranca').addEventListener('click', function () {
-      gerarPlanilha(registros.filter(function (r) { return !r.atestado && !r.pago; }), 'cobranca-pendente');
+      gerarPlanilha(registrosDoPeriodo().filter(function (r) { return !r.atestado && !r.pago; }), 'cobranca-pendente');
     });
+    document.getElementById('seletorAno').addEventListener('change', mudarAnoLetivo);
+    document.getElementById('seletorSemestre').addEventListener('change', renderizar);
 
     if (podeEditar) {
       document.getElementById('btnNovo').addEventListener('click', function () { abrirModal(null); });
@@ -65,7 +67,58 @@
 
     preencherComponente();
     preencherFiltroSerie();
+    preencherSeletorAnoSemestre();
     renderizar();
+  }
+
+  /* -------------------------------------------------------------------------
+   * ANO LETIVO / SEMESTRE — o registro não guarda essa informação; ano/semestre
+   * são derivados da data (dataRealizacao, ou criadoEm quando ainda não tem
+   * data marcada). Trocar o ano também recarrega a lista de aluno do Azure
+   * (autocomplete), igual o dashboard de saídas pedagógicas faz com passeio.
+   * ---------------------------------------------------------------------- */
+  function preencherSeletorAnoSemestre() {
+    var anoAtual = dados.ano || new Date().getFullYear();
+    var anos = (dados.anosDisponiveis && dados.anosDisponiveis.length) ? dados.anosDisponiveis.slice() : [anoAtual];
+    if (anos.indexOf(anoAtual) < 0) anos.push(anoAtual);
+    anos.sort(function (a, b) { return b - a; });
+
+    var seletorAno = document.getElementById('seletorAno');
+    seletorAno.innerHTML = anos.map(function (a) { return '<option value="' + a + '">' + a + '</option>'; }).join('');
+    seletorAno.value = anoAtual;
+
+    // Semestre corrente de verdade (mês 1-6 = 1º, 7-12 = 2º), só na 1ª carga.
+    document.getElementById('seletorSemestre').value = (new Date().getMonth() + 1) <= 6 ? '1' : '2';
+  }
+
+  function mudarAnoLetivo() {
+    var ano = document.getElementById('seletorAno').value;
+    chamar('getBootstrap', { ano: ano }).then(function (novo) {
+      dados = novo;
+      registros = novo.registros || [];
+      alunos = novo.alunos || [];
+      preencherFiltroSerie();
+      renderizar();
+      mostrarToast('Ano letivo ' + ano + ' carregado.');
+    }).catch(mostrarErro);
+  }
+
+  /** yyyy-mm-dd (ou o ISO completo do criadoEm) -> {ano, semestre}. */
+  function periodoDoRegistro(r) {
+    var data = r.dataRealizacao || r.criadoEm || '';
+    var ano = Number(data.slice(0, 4));
+    var mes = Number(data.slice(5, 7));
+    return { ano: ano || null, semestre: mes && mes <= 6 ? '1' : '2' };
+  }
+
+  /** Registros do ano+semestre selecionado nos pills do topo. */
+  function registrosDoPeriodo() {
+    var ano = Number(document.getElementById('seletorAno').value);
+    var semestre = document.getElementById('seletorSemestre').value;
+    return registros.filter(function (r) {
+      var p = periodoDoRegistro(r);
+      return p.ano === ano && p.semestre === semestre;
+    });
   }
 
   function alternarTema() {
@@ -132,8 +185,9 @@
     var componente = document.getElementById('filtroComponente').value;
     var pago = document.getElementById('filtroPago').value;
     var atestado = document.getElementById('filtroAtestado').value;
+    var doPeriodo = registrosDoPeriodo();
 
-    var filtrados = registros.filter(function (r) {
+    var filtrados = doPeriodo.filter(function (r) {
       if (busca && r.alunoNome.toLowerCase().indexOf(busca) === -1) return false;
       if (serie && r.serie !== serie) return false;
       if (componente && r.componente !== componente) return false;
@@ -144,11 +198,11 @@
       return true;
     });
 
-    document.getElementById('kpiTotal').textContent = registros.length;
-    document.getElementById('kpiPagos').textContent = registros.filter(function (r) { return r.pago; }).length;
-    document.getElementById('kpiPendentes').textContent = registros.filter(function (r) { return !r.pago && !r.atestado; }).length;
-    document.getElementById('kpiRealizadas').textContent = registros.filter(function (r) { return r.realizada; }).length;
-    document.getElementById('kpiAtestados').textContent = registros.filter(function (r) { return r.atestado; }).length;
+    document.getElementById('kpiTotal').textContent = doPeriodo.length;
+    document.getElementById('kpiPagos').textContent = doPeriodo.filter(function (r) { return r.pago; }).length;
+    document.getElementById('kpiPendentes').textContent = doPeriodo.filter(function (r) { return !r.pago && !r.atestado; }).length;
+    document.getElementById('kpiRealizadas').textContent = doPeriodo.filter(function (r) { return r.realizada; }).length;
+    document.getElementById('kpiAtestados').textContent = doPeriodo.filter(function (r) { return r.atestado; }).length;
 
     // Agrupa por aluno — a tabela mostra 1 linha por aluno, clica pra ver as
     // matéria dele. Ordem de chegada do primeiro registro de cada aluno.
@@ -203,11 +257,11 @@
     document.getElementById('abaCobranca').classList.toggle('ativa', nome === 'cobranca');
   }
 
-  /** Aluno com pelo menos 1 matéria pendente de pagamento (sem atestado) — sempre sobre TUDO, ignora os filtros da aba Registros. */
+  /** Aluno com pelo menos 1 matéria pendente de pagamento (sem atestado), no ano/semestre selecionado. */
   function renderCobranca() {
     var porAluno = {};
     var ordem = [];
-    registros.filter(function (r) { return !r.atestado && !r.pago; }).forEach(function (r) {
+    registrosDoPeriodo().filter(function (r) { return !r.atestado && !r.pago; }).forEach(function (r) {
       var chave = chaveAlunoDe(r);
       if (!porAluno[chave]) { porAluno[chave] = { chave: chave, alunoNome: r.alunoNome, turma: r.turma || r.serie, itens: [] }; ordem.push(chave); }
       porAluno[chave].itens.push(r);

@@ -140,6 +140,10 @@ var AzureSQLService = (function () {
   }
 
   function getAnos() {
+    if (Config.useMock()) {
+      var atual = new Date().getFullYear();
+      return [atual, atual - 1];
+    }
     return Cache.remember('anos_disp', Config.REF_TTL, function () {
       return AzureSQL.queryJsonComFallback(Queries.anosDisponiveis())
         .map(function (r) { return Number(r.ANO); })

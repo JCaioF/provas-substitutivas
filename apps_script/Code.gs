@@ -63,7 +63,7 @@ function apiRouter(method, payloadJson) {
   }
 
   var handlers = {
-    getBootstrap: function () { return RegistrosService.getBootstrap(); },
+    getBootstrap: function () { return RegistrosService.getBootstrap(p.ano); },
     criarRegistro: function () { return RegistrosService.criar(p.dados); },
     atualizarRegistro: function () { return RegistrosService.atualizar(p.id, p.dados); },
     excluirRegistro: function () { return RegistrosService.excluir(p.id); },
