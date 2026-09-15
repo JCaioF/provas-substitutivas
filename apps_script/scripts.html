@@ -79,9 +79,8 @@
    * ---------------------------------------------------------------------- */
   function preencherSeletorAnoTrimestre() {
     var anoAtual = dados.ano || new Date().getFullYear();
-    var anos = (dados.anosDisponiveis && dados.anosDisponiveis.length) ? dados.anosDisponiveis.slice() : [anoAtual];
-    if (anos.indexOf(anoAtual) < 0) anos.push(anoAtual);
-    anos.sort(function (a, b) { return b - a; });
+    // Só corrente + próximo — o Azure devolve ano antigo também, mas não interessa aqui.
+    var anos = [anoAtual, anoAtual + 1];
 
     var seletorAno = document.getElementById('seletorAno');
     seletorAno.innerHTML = anos.map(function (a) { return '<option value="' + a + '">' + a + '</option>'; }).join('');
