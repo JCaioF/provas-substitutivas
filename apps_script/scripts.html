@@ -111,6 +111,24 @@
     return { ano: ano || null, trimestre: trimestre };
   }
 
+  /**
+   * Data padrão pro campo "Data da prova" num registro novo: hoje, se hoje
+   * cair dentro do ano/trimestre selecionado no pill; senão o 1º dia do
+   * trimestre selecionado. Fica editável — é só pra já nascer no trimestre
+   * certo mesmo se ninguém mexer na data.
+   */
+  function dataPadraoDoTrimestre() {
+    var ano = document.getElementById('seletorAno').value;
+    var trimestre = document.getElementById('seletorTrimestre').value;
+    var hoje = new Date();
+    var hojeIso = hoje.toISOString().slice(0, 10);
+    if (String(hoje.getFullYear()) === ano && periodoDoRegistro({ dataRealizacao: hojeIso }).trimestre === trimestre) {
+      return hojeIso;
+    }
+    var mesInicio = { '1': '01', '2': '05', '3': '09' }[trimestre] || '01';
+    return ano + '-' + mesInicio + '-01';
+  }
+
   /** Registros do ano+trimestre selecionado nos pills do topo. */
   function registrosDoPeriodo() {
     var ano = Number(document.getElementById('seletorAno').value);
@@ -459,7 +477,7 @@
     }
 
     document.getElementById('campoRealizada').checked = registro ? !!registro.realizada : false;
-    document.getElementById('campoDataRealizacao').value = registro ? (registro.dataRealizacao || '') : '';
+    document.getElementById('campoDataRealizacao').value = registro ? (registro.dataRealizacao || '') : dataPadraoDoTrimestre();
 
     document.getElementById('modalFundo').classList.add('aberto');
   }
@@ -540,7 +558,7 @@
     document.getElementById('campoAtestadoArquivoNome').value = '';
     document.getElementById('linkAtestadoAtual').style.display = 'none';
     document.getElementById('campoRealizada').checked = false;
-    document.getElementById('campoDataRealizacao').value = '';
+    document.getElementById('campoDataRealizacao').value = dataPadraoDoTrimestre();
     arquivoAtestadoSelecionado = null;
     document.getElementById('campoComponente').focus();
   }
